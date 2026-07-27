@@ -55,6 +55,7 @@ docs/**
 
 # OS files
 .DS_Store
+.idea/
 
 # Packaging metadata
 pico.egg-info/
