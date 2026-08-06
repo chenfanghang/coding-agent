@@ -1,148 +1,114 @@
-# Pico v3 架构与技术设计白皮书
+# Chapter 6：任务规划与多 Agent 隔离协同
 
-> 📖 **【单向阅读链路 - Chapter 6/9】**  
-> **[⬅️ 上一章：05_分层记忆系统与数据检疫治理](./05_分层记忆系统与数据检疫治理.md) | [下一章：07_审计工件落盘与确定性回放评测 ➡️](./07_审计工件落盘与确定性回放评测.md)**
+> [上一章：分层记忆系统](./05_分层记忆系统与数据检疫治理.md) · [下一章：任务恢复与状态一致性](./07_任务恢复与状态一致性.md)
 
----
-
-# Chapter 6: 任务规划与多 Agent 隔离协同
-
-在 Chapter 5 中，我们探讨了分层记忆与数据检疫治理。处理大型复杂工程重构时，Agent 往往需要防范“未规划前盲目改代码”、“多 Step 任务中途掉队迷路”以及“多 Agent 协作时越权篡改主工程源码”三大风险。
-
-本章将自顶向下剖析 Pico 的 **`PlanModeController` 受控规划模式**、**`TodoLedger` 动态任务账本**，以及 **`WorkerManager` 线程子任务派发与 `write_scope` 路径写隔离**。
+> **本章关注**：复杂任务如何先调研再实施、进度如何持续可见、并行子任务如何限制写入范围。
 
 ---
 
-## 6.1 `PlanModeController` 规划模式与工具物理屏蔽
+## 6.1 Plan Mode
 
-### 6.1.1 为什么需要 Plan 受控模式？
+`PlanModeManager` 将 Session 的 `runtime_mode` 切换为 `plan`，并刷新工具 Profile 与稳定前缀。在该模式下：
 
-在面对复杂跨模块重构时，通用 Agent 常常会一拿到需求就直接发起 `patch_file` 盲目改代码，引发破坏性风险。在 [pico/core/plan_mode.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/core/plan_mode.py) 中，Pico 设计了工具 Profile 级物理屏蔽：
+- 可以检查 Workspace；
+- 写操作只能指向当前 `.pico/plans/` 下的活动计划工件；
+- 只允许启动只读 `Explore` 子 Agent；
+- 最终答复前必须已经写入非空计划工件。
 
 ```text
-[ 用户发起复杂需求或输入 /plan 命令 ]
-                  │
-                  v
-[ PlanModeController 启动, 切换 ToolProfile = 'plan' ]
-                  │
-                  ├── 1. 物理封禁 write_file, patch_file, run_shell 写工具
-                  └── 2. 仅开通 read_file, search_memory, list_dir 只读工具
-                  │
-                  v
-[ 模型深入调研仓库, 生成结构化 implementation_plan.md ]
-                  │
-                  v
-[ 用户审计并确认计划, 执行 ExitPlanMode() ]
-                  │
-                  ├── 1. ToolProfile 恢复为 'default'
-                  └── 2. 解析 Plan 提取 Task 自动初始化入 TodoLedger
+enter_plan_mode
+  -> 保存 plan_path
+  -> Tool Profile = plan
+  -> 调研与更新 Todo
+  -> 写入活动计划工件
+  -> exit_plan_mode
+  -> Tool Profile = default
 ```
 
-- **工具屏蔽机制**：在 `plan` Profile 激活期间，任何对 `write_file` 或 `run_shell` 的调用均会被网关直接拦截并抛出 `ToolDisabledInPlanModeError`；
-- **计划注回机制**：用户确认计划退出 Plan 模式后，系统自动解析 `implementation_plan.md` 中的步骤清单，转化为 `TodoLedger` 账本条目。
+退出 Plan Mode 不会自动解析计划并创建 Todo；Todo 由 Agent 通过显式工具维护。文档不应把尚未实现的自动转换写成当前能力。
 
----
+## 6.2 TodoLedger
 
-### 6.1.2 `implementation_plan.md` 规范契约
+`TodoLedger` 位于 `pico/core/todo_ledger.py`，状态保存在 Session 中，并将变更记录到当前 TaskState 和事件总线。
 
-在 Plan 模式下生成的规划文件遵循统一格式：
-
-```markdown
-# [目标重构描述]
-
-## 1. 架构变更与设计决策 (Design Decisions)
-- 描述背景上下文与为何选择该方案。
-
-## 2. 待解决疑点与风险 (Open Questions & Risks)
-- 记录需要用户确认的破坏性变更。
-
-## 3. 受影响模块与代码文件 (Proposed Changes)
-- [MODIFY] pico/core/engine.py
-- [NEW] pico/core/new_feature.py
-
-## 4. 自动化验证计划 (Verification Plan)
-- 单元测试命令: `pytest tests/test_new_feature.py`
-```
-
----
-
-## 6.2 `TodoLedger` 任务账本与门禁联动
-
-在 [pico/core/task_ledger.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/core/task_ledger.py) 中，Pico 维护了一个内存任务账本。每一个 Step 变更均记录在 `task_state.todo_changes` 中：
-
-### 1. Todo 账本 5 状态生命周期
-
-```text
-┌──────────────────────────────────────────────────────────────┐
-│ Todo 账本生命周期流转 (pending -> in_progress -> completed)  │
-│ 1. Agent 调用 update_todo(id=1, status="in_progress")        │
-│ 2. 调度 ToolExecutor 执行物理代码修改与 pytest 验证           │
-│ 3. Agent 调用 update_todo(id=1, status="completed")          │
-└──────────────────────────────┬───────────────────────────────┘
-                               │
-                               v
-┌──────────────────────────────────────────────────────────────┐
-│ FinalReadiness 门禁联动检查                                  │
-│ - 审计是否存在 status in {"pending", "in_progress"}         │
-│   且 priority == "high" 的未解决高优先 Task                  │
-│ - 若存在，触发 unresolved_high_priority_todo 门禁打回！     │
-└──────────────────────────────────────────────────────────────┘
-```
-
-| Todo 状态 (`Status`) | 含义与控制流影响 |
+| 状态 | 含义 |
 | :--- | :--- |
-| **`pending`** | 初始排队中，未开始执行。 |
-| **`in_progress`** | 当前正在执行，被 Engine 跟踪关注。 |
-| **`completed`** | 已成功完成并通过测试校验。 |
-| **`failed`** | 执行失败，记录报错日志待重试。 |
-| **`cancelled`** | 计划变更已废弃。 |
+| `pending` | 尚未开始 |
+| `in_progress` | 正在执行 |
+| `done` | 已完成 |
+| `blocked` | 因明确条件无法继续 |
 
----
+优先级为 `low`、`normal`、`high`。Todo 是任务控制面，不代表对应代码已经通过测试；完成证据仍由 TaskState 和 Final Readiness 判断。
 
-## 6.3 Worker 子 Agent 派发与 `write_scope` 路径写隔离
+### Todo、TaskState 与 Plan 的区别
 
-### 6.3.1 WorkerManager 并发派发与隔离架构
+| 对象 | 回答的问题 | 是否跨轮次保存 |
+| :--- | :--- | :---: |
+| Plan Artifact | 准备如何实施，风险和验证方案是什么 | 是 |
+| TodoLedger | 当前有哪些工作项，各自状态是什么 | 是 |
+| TaskState | 这次请求实际做了什么，有哪些证据和停止原因 | 单次 Run 持久化 |
 
-当主 Agent 需要派发 Explore（只读探索）或 Worker（后台并发写）子 Agent 时，在 [pico/core/worker_manager.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/core/worker_manager.py) 中启动子 Task Session：
+Plan 是方案，Todo 是控制面，TaskState 是运行事实。三者相互关联，但不能互相代替。
+
+## 6.3 Worker 生命周期
+
+`WorkerManager` 管理 `worker` 与 `Explore` 两类子 Agent。存在 `model_client_factory` 时可使用后台线程执行，否则同步运行。每个 Worker 拥有 Child Runtime、独立状态和可选写入范围。
 
 ```text
-[ 主 Agent 调用 spawn_worker(prompt="...", write_scope=["src/auth/"]) ]
-                                 │
-                                 v
-[ WorkerManager.dispatch_worker() ]
-                                 │
-                                 ├── 1. 在 ThreadPoolExecutor 中分配独立线程
-                                 ├── 2. 创设独立的 Child Session ID 与 Child Run Context
-                                 ├── 3. 继承 Parent Workspace Snapshot 物理快照
-                                 └── 4. 为 Child Session 强行注入 write_scope 拦截器
-                                 │
-                                 v
-┌──────────────────────────────────────────────────────────────┐
-│ 子 Worker 线程中独立运行 ReAct 调度 Step 循环               │
-│                                                              │
-│ - 尝试改物理文件 src/auth/jwt.py ──> (在 write_scope 内) ──> 放行│
-│ - 尝试改物理文件 src/main.py    ──> (超出 Scope 白名单!) ──> 强打回│
-│                                "Write Scope Denied: src/main.py"
-└──────────────────────────────┬───────────────────────────────┘
-                               │
-                               v
-[ 子 Worker 完成子任务，提纯归纳结果 summary 回传给主 Agent ]
+主 Agent
+  -> spawn(description, prompt, type, write_scope)
+  -> Child Runtime
+       |-- Explore：只读探索
+       `-- worker：在权限允许时写入
+  -> 状态 / 结果 / 通知回传主 Agent
 ```
 
----
+支持的生命周期操作包括创建、继续、停止请求、通知回收和 Runtime 关闭。线程提供调度并发，不等同于进程级安全边界。
 
-### 6.3.2 与通用多 Agent 框架对比矩阵
+## 6.4 `write_scope` 的实际语义
 
-在 Coding 场景下，Pico `WorkerManager` 与通用多 Agent 框架对比效果如下：
+`write_scope` 是 Worker 写工具的路径白名单，由 Child Runtime 的权限检查执行。它用于限制 Agent 通过注册工具发起的写入，但不能表述为完整操作系统沙箱：如果未来引入绕过工具层的写入口，仍需额外隔离。
 
-| 对比维度 | 通用多 Agent 框架 (如 AutoGen / CrewAI) | Pico WorkerManager |
+当前 Worker 采用两层约束：
+
+1. `worker` Tool Profile 不暴露 `run_shell`、协调器工具、模式切换工具和交互工具；
+2. `write_file` 与 `patch_file` 继续由 PermissionChecker 检查目标路径是否位于 `write_scope`。
+
+`Explore` 始终只读；普通 Worker 如果没有提供 `write_scope`，Child Runtime 同样会进入只读状态。因此 Worker 不能通过 `run_shell` 绕过路径白名单，但这仍是当前 Tool Profile 下的应用层保证，不是独立进程或文件系统 Namespace。
+
+安全结论应通过越权用例验证，不能依据代码分支直接推导“100% 拦截”。当前场景集和失败边界见 [运行时安全与记忆治理评测](../评测体系/07_运行时安全与记忆治理评测.md)。
+
+## 6.5 协同设计中的取舍
+
+| 选择 | 优点 | 限制 |
 | :--- | :--- | :--- |
-| **写代码隔离** | 无路径级别隔离，子 Agent 易越权改主工程源码 | **强注入 `write_scope` 路径白名单，越权物理强打回** |
-| **状态继承** | 全量共享或无法隔离 Workspace 快照 | **独立 Child Session + 继承隔离的 Workspace Snapshot** |
-| **资源消耗** | 启动多进程/网络 RPC，内存与启动耗时巨大 | **轻量 `ThreadPoolExecutor` 线程隔离，启动 < 10ms** |
-| **安全场景拦截**| 越权写入成功率 40%+ | **100% 物理拦截路径越权，非预期篡改率 0.0%** |
+| Child Runtime | 状态和工具面可以独立配置 | 仍共享本地工作区，需要作用域治理 |
+| 后台线程 | 实现简单，可复用当前进程依赖 | 不提供进程级故障与资源隔离 |
+| `Explore` / `worker` 两类角色 | 权限语义清晰 | 不承担复杂组织层级建模 |
+| 显式 `write_scope` | 路径边界可审计 | 只约束注册工具路径，不能替代 OS Sandbox |
+| 通知队列 | 主 Agent 可异步接收完成结果 | 仍需处理停止与 Runtime 关闭 |
+
+## 6.6 源码索引与本章小结
+
+- `pico/core/plan_mode.py`：运行模式和计划工件约束。
+- `pico/core/todo_ledger.py`：Todo 状态与事件。
+- `pico/core/worker_manager.py`：Worker 创建、继续、停止与通知。
+- `pico/core/worker_runtime.py`：Child Runtime 装配。
+- `pico/core/worker_execution.py`：子任务执行过程。
+- `pico/core/permissions.py`：Plan Mode 与 `write_scope` 权限判定。
+
+Pico 的多 Agent 设计优先追求**边界清晰和执行可追踪**，而不是最大化角色数量。是否值得派发 Worker，应由任务是否可独立、上下文是否可隔离以及并行收益是否真实决定。
+
+### 面试表达
+
+> **30 秒讲法**：复杂任务先通过 Plan Mode 和 TodoLedger 显式拆分，再把可独立子任务交给 Child Runtime。Explore 只读，普通 Worker 通过 Tool Profile 缩小工具面，并由 `write_scope` 限制写入路径；执行结果和通知回传主 Agent，由主 Agent 负责最终整合与验收。
+
+**项目推演题（非真实面经）**：什么时候值得派发 Worker？主 Agent 与 Child Runtime 共享什么、隔离什么？Worker 能否通过 Shell 绕过 `write_scope`？后台执行如何停止和回收？
+
+**回答边界**：当前使用后台线程与应用层工具隔离，不是进程级沙箱；不要把“多 Agent”描述成角色越多越先进，应强调任务独立性、写入边界和可追踪性。
+
+> **延伸练习**：[Pico 完整高频面试题与参考答案](../面试高频实战/Pico完整高频面试题与参考答案.md)
 
 ---
 
-> 📖 **【单向阅读链路 - 本章结束】**  
-> **[⬅️ 上一章：05_分层记忆系统与数据检疫治理](./05_分层记忆系统与数据检疫治理.md) | [下一章：07_审计工件落盘与确定性回放评测 ➡️](./07_审计工件落盘与确定性回放评测.md)**
+> [上一章：分层记忆系统](./05_分层记忆系统与数据检疫治理.md) · [下一章：任务恢复与状态一致性](./07_任务恢复与状态一致性.md)

@@ -491,13 +491,15 @@
 
 ## 九、 三大实测消融实验数据表与 Troubleshooting 排错案例
 
-### 9.1 三大消融实验数据对比表 (Ablation Studies)
+### 9.1 真实物理评测消融数据对比表 (Real Benchmark Artifacts)
 
-| 实验组别 | 评价指标 | 基准组 (完整 Pico v3) | 关停组 (Ablated) | 性能变化幅度 / 工程结论 |
+| 实验组别 | 评价指标 | 优化前 (Baseline / Off) | 优化后 (Pico v3 Full) | 物理实测数据源与工程结论 |
 | :--- | :--- | :--- | :--- | :--- |
-| **消融实验一：静态 Prefix 锁** | Prompt Caching 命中率<br>首包延迟 (TTFT)<br>单次推理 API 成本 | **85.3%**<br>**320ms**<br>**¥0.12 / run** | 12.1% (动态头部)<br>1450ms<br>¥0.43 / run | 锁死静态前缀后 API 成本骤降 **72.1%**，TTFT 延迟缩短 **77.9%**。 |
-| **消融实验二：FinalReadiness 门禁** | 盲目未测试交付率<br>Pass@1 代码一次通过率 | **2.1%**<br>**91.5%** | 78.4% (纯 Prompt)<br>41.8% | 调度层硬门禁将盲目交付降低 **97.3%**，一次通过率提升 **1.18 倍**。 |
-| **消融实验三：MemoryQuarantine** | 长期库脏数据污染率<br>记忆召回精细准确率 | **0.0%**<br>**96.2%** | 34.6% (无隔离池)<br>61.2% | 检疫池隔离彻底消除了坏数据污染 (0.0%)，精细召回率提升 35 个百分点。 |
+| **实验一：上下文编排 (Context Orchestrator)** | 平均 Prompt 字符数<br>平均 Prompt 字符压缩率<br>当前请求保留率 | 13,450 chars<br>—<br>— | **11,982.67 chars**<br>**10.91%** (最大 19.68%)<br>**100%** | 来源：`artifacts/context-experiment.json`<br>在 12 配置测试集中实现 Prompt 物理瘦身 **10.91%**，且 100% 不丢失用户当前请求。 |
+| **实验二：任务恢复与漂移 (Checkpoint & Resume)** | Resume 恢复成功率<br>Workspace Drift 漂移识别率<br>旧状态错误接受率 | 0%<br>0%<br>100% | **90%**<br>**100%**<br>**0%** | 来源：`artifacts/recovery-ablation-v2.json`<br>在中断恢复测试中实现 90% 恢复率，漂移识别率 100%，错误旧状态拦截率 100%。 |
+| **实验三：离线分层记忆 (Layered Memory)** | 重复文件读取次数<br>平均模型尝试次数<br>任务正确率 | 60 次<br>2 次<br>100% | **0 次**<br>**1 次**<br>**100%** | 来源：`artifacts/memory-ablation-v2.json`<br>在确定性离线 Benchmark 中将重复读取清零，模型尝试次数减半。 |
+| **实验四：工具安全与权限 (Tool Security)** | 安全场景物理拦截率<br>只读模式/越权写拦截 | 0%<br>0% | **100%** (33/33)<br>**100%** | 来源：`artifacts/security-experiment.json`<br>涵盖路径逃逸、符号链接逃逸、只读写入与脱敏等 33 次调用 100% 物理拦截。 |
+
 
 ---
 
