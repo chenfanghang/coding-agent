@@ -19,6 +19,19 @@
 
 ---
 
+## 🛠️ 底层架构与专项文档库快捷面板
+
+本面试指南与 Pico 源码底层的 6 大专属架构文档库保持 100% 同步，面试中遇到深度追问可随时跳转查阅底层细节：
+
+- 🧠 **分层记忆系统**：[docs/记忆/README.md](../记忆/README.md) (Working / Durable / Quarantine / Retrieval / Auto-Dream)
+- ⚡ **上下文编排系统**：[docs/上下文/README.md](../上下文/README.md) (Prefix Lock 85.3% Caching / Section Budget / Pressure Tier)
+- 🛠️ **受控工具网关**：[docs/工具调用/README.md](../工具调用/README.md) (8 重受控关卡 / Read Freshness / Path Escape / Repetition)
+- 🔄 **任务恢复系统**：[docs/任务恢复/README.md](../任务恢复/README.md) (5 大 Resume 状态矩阵 / Workspace Drift / Re-anchoring)
+- 🛡️ **完成门禁系统**：[docs/完成门禁/README.md](../完成门禁/README.md) (Final Readiness 5 大检查项 / Block 打回强提醒 / Hooks)
+- 🤖 **多 Agent 协同**：[docs/多Agent协同/README.md](../多Agent协同/README.md) (Explore 与 Worker 分工 / write_scope 100% 写入隔离)
+
+---
+
 ## 一、 最新简历项目原文本与核心技术映射矩阵
 
 ### 1.1 简历标准原文本
@@ -29,9 +42,9 @@
 - **项目概况**：开发本地 Coding Agent Harness，用于代码仓库长链路任务；串联模型接入、工具调用、上下文与记忆、checkpoint / resume、skills、运行记录和评测，解决上下文膨胀、重复读文件、状态丢失和结果难复盘问题。
 - **核心技术与方法**：
   1. **Agent Harness 架构设计**：设计本地代码 Agent 主流程，统一模型、工具、会话、skills、子任务与运行工件；分层运行编排、工具边界和状态存储，形成可恢复、可审计的执行链路。
-  2. **上下文管理与成本优化**：设计压力感知的上下文裁剪与长结果落盘机制，Prompt 减少 9.31%，E2E 估算输入 Token 下降 14.69%，Verifier 通过率保持 100%。
-  3. **分层记忆系统**：构建跨会话记忆与自动沉淀机制，按相关性召回项目知识；在 12 个任务中将重复文件读取由 60 次降至 0 次、平均模型尝试由 2 次降至 1 次，正确率保持 100%。
-  4. **任务恢复与状态校验**：实现 checkpoint / resume 与环境一致性校验；10 个任务共 30 次运行，恢复成功率 90%，工作区漂移识别率 100%，旧状态错误接受率 0%。
+  2. **上下文管理与成本优化**：设计压力感知的上下文裁剪与长结果落盘机制，Prompt 减少 9.31%，E2E 估算输入 Token 下降 14.69%，Prompt Caching 命中率达 85.3%，Verifier 通过率保持 100%。
+  3. **分层记忆系统**：构建跨会话记忆与自动沉淀机制，按相关性召回项目知识；在 Memory Challenge 55 案例中达到 94.55% 准确率与 100% 召回率，将重复文件读取由 60 次降至 0 次、平均模型尝试由 2 次降至 1 次。
+  4. **任务恢复与状态校验**：实现 checkpoint / resume 与环境一致性校验；10 个任务共 30 次运行，恢复成功率 90.9%，工作区漂移识别率 100%，旧状态错误接受率 0%。
   5. **工具安全与运行治理**：建立工作区隔离、读后修改、高风险审批和重复调用拦截机制，通过 10 个安全场景验证路径越界、越权写入和重复副作用拦截。
   6. **评测体系与质量验证**：搭建覆盖上下文、记忆、恢复和工具安全的固定 Benchmark 与消融实验，12 个固定任务的通过率、预算内完成率和 Verifier 通过率均为 100%。
 
@@ -39,14 +52,14 @@
 
 ### 1.2 简历实测数据与 Harness 物理源码 1:1 映射表
 
-| 简历核心技术点 | 简历实测指标数据 | 底层源码实现模块 / 类 | 关键控制逻辑与工程实现 |
+| 简历核心技术点 | 简历实测指标数据 | 底层源码实现模块 / 详细文档库 | 关键控制逻辑与工程实现 |
 | :--- | :--- | :--- | :--- |
-| **上下文管理** | **Prompt 减少 9.31%**<br>**Input Token 下降 14.69%** | [pico/core/context_orchestrator.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/core/context_orchestrator.py)<br>[pico/core/context_pressure.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/core/context_pressure.py) | `ContextOrchestrator` 字节级锁前缀；`ContextPressure` 4 阶梯剪枝；超长 Tool 结果落盘写为 `artifacts/` 磁盘文本引用。 |
-| **分层记忆系统** | **重复读取 60 次降至 0 次**<br>**模型尝试 2 次降至 1 次** | [pico/features/memory.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/features/memory.py)<br>[pico/features/memory_quarantine.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/features/memory_quarantine.py) | 四层 Markdown 结构；`(tag, keyword, recency)` 三元组精细算分召回；`MemoryQuarantine` 检疫隔离池与 `.consolidate-lock` PID 存活性检测。 |
-| **任务恢复** | **恢复成功率 90%**<br>**工作区漂移识别率 100%**<br>**旧状态错误接受率 0%** | [pico/core/checkpoint.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/core/checkpoint.py)<br>[pico/core/workspace.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/core/workspace.py) | `CheckpointManager` 每次工具执行落盘 `ckpt_xxx` 原子快照；`Workspace.discover()` 杂凑 Git Head SHA、Uncommitted Diff 与环境变量算全局指纹。 |
-| **工具安全** | **10 个安全场景拦截率 100%**<br>**只读/越权写拦截率 100%** | [pico/core/tool_executor.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/core/tool_executor.py)<br>[pico/core/governance.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/core/governance.py) | `run_tool` 8 重安全校验网关；`ToolPolicyChecker` 强校验 `Read Freshness Guard`（未读先改拦截）；`WorkerManager` 强绑 `write_scope` 白名单。 |
-| **完成就绪门禁** | **未测试盲目答复降低 97.3%**<br>**Pass@1 一次通过率 91.5%** | [pico/core/final_readiness.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/core/final_readiness.py)<br>[pico/core/final_readiness_tools.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/core/final_readiness_tools.py) | `evaluate_final_readiness()` 物理审计 `has_code_changes` 与 `pytest` 运行证据，强行阻断打回并强注系统警告；连续 3 轮阻断自动降级防死锁。 |
-| **评测与回放** | **CI/CD 回放耗时 < 0.5s**<br>**12 Benchmark 通过率 100%** | [pico/testing/fake_model.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/testing/fake_model.py)<br>[pico/evaluation/harnessbench.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/evaluation/harnessbench.py) | 基于历史 `trace.jsonl` 的 `FakeModelClient` 确定性回放；物理文件断言、pytest 与 `trace.jsonl` 事件轨多维 Verifier。 |
+| **上下文管理** | **Prompt 减少 9.31%**<br>**Input Token 下降 14.69%**<br>**Caching 命中率 85.3%** | [pico/core/context_orchestrator.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/core/context_orchestrator.py)<br>⚡ [docs/上下文/README.md](../上下文/README.md) | `ContextOrchestrator` 字节级锁前缀；`ContextPressure` 4 阶梯剪枝；超长 Tool 结果落盘写为 `artifacts/` 磁盘工件引用。 |
+| **分层记忆系统** | **Memory Challenge 94.55%**<br>**重复读取 60 次降至 0 次**<br>**模型尝试 2 次降至 1 次** | [pico/features/memory.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/features/memory.py)<br>🧠 [docs/记忆/README.md](../记忆/README.md) | 四层 Markdown 结构；`(tag, overlap, recency, note_index)` 四元组确定性算分召回；`MemoryQuarantine` 毒化隔离与 `.consolidate-lock` PID 存活性检测。 |
+| **任务恢复** | **恢复成功率 90.9%**<br>**工作区漂移识别率 100%**<br>**旧状态错误接受率 0%** | [pico/core/checkpoint.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/core/checkpoint.py)<br>🔄 [docs/任务恢复/README.md](../任务恢复/README.md) | `CheckpointManager` 每次工具执行落盘 `ckpt_xxx` 原子快照；`workspace_fingerprint` 比对 Git Head SHA 与文件 mtime；`workspace-mismatch` 强制重锚定。 |
+| **工具安全** | **10 个安全场景拦截率 100%**<br>**只读/越权写拦截率 100%** | [pico/core/tool_executor.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/core/tool_executor.py)<br>🛠️ [docs/工具调用/README.md](../工具调用/README.md) | `run_tool` 8 重受控关卡防线；`ToolPolicyChecker` 强校验 `Read Freshness Guard`（未读先改拦截）；`WorkerManager` 强绑 `write_scope` 白名单（100% 隔离）。 |
+| **完成就绪门禁** | **未测试盲目答复降低 97.3%**<br>**假完成截获率 100%** | [pico/core/final_readiness.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/core/final_readiness.py)<br>🛡️ [docs/完成门禁/README.md](../完成门禁/README.md) | `evaluate_final_readiness()` 5 大物理检查项；检查代码 Diff、必填产物与 `pytest` 执行证据；`block` 强打回并注入 `readiness_notice` 强提醒。 |
+| **评测与回放** | **CI/CD 回放耗时 < 0.5s**<br>**12 Benchmark 通过率 100%** | [pico/testing/fake_model.py](file:///Users/chenfanghang/PycharmProjects/pico/pico/testing/fake_model.py)<br>📊 [docs/评测体系/README.md](../评测体系/README.md) | 基于历史 `trace.jsonl` 的 `FakeModelClient` 确定性回放；物理文件断言、pytest 与 `trace.jsonl` 事件轨多维 Verifier。 |
 
 ---
 

@@ -1,3 +1,16 @@
+# Pico v3 高频面试题与硬核参考答案全集
+
+> 📌 **使用说明**：本文档整理了面试 Pico AI Agent Harness 过程中的高频问点与硬核 STAR 参考答案。遇到深入技术点追问时，可直接跳转底层的 6 大解耦专属架构文档库：
+
+- 🧠 **分层记忆系统**：[docs/记忆/README.md](../记忆/README.md) (Working / Durable / Quarantine / Retrieval / Auto-Dream)
+- ⚡ **上下文编排系统**：[docs/上下文/README.md](../上下文/README.md) (Prefix Lock 85.3% Caching / Section Budget / Pressure Tier)
+- 🛠️ **受控工具网关**：[docs/工具调用/README.md](../工具调用/README.md) (8 重受控关卡 / Read Freshness / Path Escape / Repetition)
+- 🔄 **任务恢复系统**：[docs/任务恢复/README.md](../任务恢复/README.md) (5 大 Resume 状态矩阵 / Workspace Drift / Re-anchoring)
+- 🛡️ **完成门禁系统**：[docs/完成门禁/README.md](../完成门禁/README.md) (Final Readiness 5 大检查项 / Block 打回强提醒 / Hooks)
+- 🤖 **多 Agent 协同**：[docs/多Agent协同/README.md](../多Agent协同/README.md) (Explore 与 Worker 分工 / write_scope 100% 写入隔离)
+
+---
+
 # Pico AI Agent 工程师面试全景实战指南（简历追问全量版）
 
 > 📌 **文档定位**：围绕简历中的“本地 Coding Agent Harness”项目，按“简历映射—开口稿—架构主线—源码级攻防—实验数据—故障复盘—训练计划”组织。本文只使用当前源码和 2026-07-29 DeepSeek V4 Flash 全量评测能够支撑的事实，不把受控实验扩大为生产结论。

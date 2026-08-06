@@ -1,4 +1,13 @@
-# Pico 实验评测说明
+# Pico 实验评测说明（面试专用版）
+
+> 📌 **使用说明**：本文件专门梳理面试官关心的评测逻辑、指标公式与实验数据。对应源码实现与详细算法参见底层的 6 大解耦专属架构文档库：
+
+- 🧠 **分层记忆系统**：[docs/记忆/README.md](../记忆/README.md) (Memory Challenge 55 案例 94.55% 准确率)
+- ⚡ **上下文编排系统**：[docs/上下文/README.md](../上下文/README.md) (Prompt Caching 85.3% 命中率 / Input Token -14.69%)
+- 🛠️ **受控工具网关**：[docs/工具调用/README.md](../工具调用/README.md) (8 重受控关卡 / Read Freshness / Path Escape 100% 阻断)
+- 🔄 **任务恢复系统**：[docs/任务恢复/README.md](../任务恢复/README.md) (恢复成功率 90.9% / Drift 识别 100%)
+- 🛡️ **完成门禁系统**：[docs/完成门禁/README.md](../完成门禁/README.md) (Final Readiness 5 大检查项 / 假完成拦截 100%)
+- 🤖 **多 Agent 协同**：[docs/多Agent协同/README.md](../多Agent协同/README.md) (Explore 与 Worker 分工 / write_scope 100% 写入隔离)
 
 > 面向用户与技术面试的项目说明  
 > 实验模型：DeepSeek `deepseek-v4-pro`  

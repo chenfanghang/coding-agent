@@ -1,5 +1,14 @@
 # Pico 项目专项面试备书
 
+> 📌 **使用说明**：本备书针对 Agent 研发工程师面试中的深度攻防与硬核问题。对应源码实现与详细算法参见底层的 6 大解耦专属架构文档库：
+
+- 🧠 **分层记忆系统**：[docs/记忆/README.md](../记忆/README.md) (Working / Durable / Quarantine / Retrieval / Auto-Dream)
+- ⚡ **上下文编排系统**：[docs/上下文/README.md](../上下文/README.md) (Prefix Lock 85.3% Caching / Section Budget / Pressure Tier)
+- 🛠️ **受控工具网关**：[docs/工具调用/README.md](../工具调用/README.md) (8 重受控关卡 / Read Freshness / Path Escape / Repetition)
+- 🔄 **任务恢复系统**：[docs/任务恢复/README.md](../任务恢复/README.md) (5 大 Resume 状态矩阵 / Workspace Drift / Re-anchoring)
+- 🛡️ **完成门禁系统**：[docs/完成门禁/README.md](../完成门禁/README.md) (Final Readiness 5 大检查项 / Block 打回强提醒 / Hooks)
+- 🤖 **多 Agent 协同**：[docs/多Agent协同/README.md](../多Agent协同/README.md) (Explore 与 Worker 分工 / write_scope 100% 写入隔离)
+
 > **口径提示：**本文保留为旧版材料，其中部分上下文、记忆和 Live Provider 指标已过期。面试准备请以 [Pico完整高频面试题与参考答案.md](./Pico完整高频面试题与参考答案.md) 为准。
 
 > 候选人：陈方航  
