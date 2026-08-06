@@ -178,23 +178,35 @@ Model Intent
 #### Q1：请用一分钟介绍 Pico。
 
 - **源码文件**：`pico/core/runtime.py`、`engine.py`、`context_manager.py`、`pico/features/memory.py`。
-- **答题骨架**：项目定位 → 四类痛点 → 核心机制 → 两到三个指标 → 当前边界。
+- **关联文档库**：🧠 [docs/记忆/01_系统概述与架构设计.md](../记忆/01_系统概述与架构设计.md) | ⚡ [docs/上下文/01_系统概述与Prompt缓存契约.md](../上下文/01_系统概述与Prompt缓存契约.md)
+- **答题骨架**：项目定位 → 四类痛点 → 核心机制 → 量化指标 → 当前边界。
 - **🎙️ 60-120 秒示范稿**：
-  > “Pico 是我开发的本地 Coding Agent Harness，面向需要多轮检索、修改、测试和恢复的代码仓库长链路任务。它和普通工具调用Demo最大的区别，是把控制权放在模型外：模型只负责提出下一步，Harness负责上下文预算、工具权限、TaskState、Checkpoint、完成门禁和Trace审计。这样既能保留模型处理开放问题的能力，又能让每次副作用和停止原因可验证。最新DeepSeek上下文矩阵共120次调用，Prompt平均压缩9.48%且目标任务正确率保持100%；55个Memory Challenge准确率94.55%、Recall@K为100%；50个真实使用场景通过49个。当前项目已具备完整运行和评测闭环，但我不会把这些受控结果扩大成生产SLA。”
+  > “Pico 是我开发的本地 Coding Agent Harness，面向需要多轮检索、修改、测试和恢复的代码仓库长链路任务。它和普通工具调用 Demo 最大的区别，是把控制权放在模型外：模型只负责提出下一步，Harness 负责上下文预算、工具权限、TaskState、Checkpoint、完成门禁和 Trace 审计。这样既能保留模型处理开放问题的能力，又能让每次副作用和停止原因可验证。在 120 次 DeepSeek V4 上下文矩阵中 Prompt 平均压缩 9.48%、前缀缓存命中率达 85.3% 且正确率保持 100%；55 个 Memory Challenge 准确率 94.55%、Recall@K 100%；50 个真实场景通过 49 个。”
+- **🛡️ 面试官可能追问与硬核防守**：
+  > **面试官追问**：“你提到控制权在模型外，如果模型输出格式损坏或者滥用工具怎么办？”  
+  > **硬核防守**：“Harness 网关设了 8 重受控关卡：在 `run_tool` 执行前先做 Pydantic Schema 校验与规范化；若格式损坏触发 `partial_success` 引导修正；若连续重复同参数调用，网关关卡 3 强行介入阻断死循环；即使格式合法，`PermissionChecker` 与 `Read Freshness Guard` 仍会对绝对路径越权和盲目覆写直接拒执行。”
 
 #### Q2：为什么要自己实现 Harness，LangGraph 或 DeepAgents 不能解决吗？
 
 - **源码文件**：`pico/core/engine.py`、`runtime.py`、`tool_executor.py`。
+- **关联文档库**：🛠️ [docs/工具调用/01_受控工具网关架构与8重防御流.md](../工具调用/01_受控工具网关架构与8重防御流.md) | 🛡️ [docs/完成门禁/01_系统概述与模型偷懒打回痛点.md](../完成门禁/01_系统概述与模型偷懒打回痛点.md)
 - **答题骨架**：认可通用框架 → 指出 Coding Runtime 特有治理 → 说明可替换边界。
 - **🎙️ 60-120 秒示范稿**：
-  > “我不是认为LangGraph或DeepAgents能力不足，而是它们解决的层次和Pico不同。通用框架擅长图编排、工具注册和Checkpointer，适合快速搭建Agent流程；Pico要解决的是本地Coding Runtime的治理问题，比如模型修改已有文件前是否读过最新内容、Worker能写哪些目录、Workspace漂移后能否继续、长工具结果如何落盘，以及模型说完成时是否真的有测试和产物证据。这些约束依赖真实文件和运行状态，单靠Prompt或增加几个图节点不够。我的取舍是把Harness做成独立控制层，同时保留清晰接口；如果未来换成LangGraph做底层编排，上下文、权限、门禁、Trace和评测合同仍然可以复用，而不是把系统绑死在自研循环上。”
+  > “我不是认为 LangGraph 或 DeepAgents 能力不足，而是它们解决的层次与 Pico 不同。通用框架擅长图编排、工具注册和 Checkpointer，适合快速搭建通用 Agent 流程；Pico 要解决的是本地 Coding Runtime 的物理治理问题，例如模型修改已有文件前是否读过最新内容 (Read Freshness Guard)、Worker 子 Agent 能写哪些目录 (`write_scope`)、Workspace 物理漂移后能否重新锚定、超长工具结果如何落盘 (Artifact Offloading)，以及模型口头说完成时是否有单元测试 (pytest) 和物理代码改动证据 (Final Readiness)。我的取舍是把 Harness 做成独立的受控控制层；如果未来换成 LangGraph 做底层编排，上下文、权限、门禁、Trace 和评测合同仍然可以完全复用。”
+- **🛡️ 面试官可能追问与硬核防守**：
+  > **面试官追问**：“如果底层编排框架换成 LangGraph，你的 Harness 怎么和它的 Checkpointer 结合？”  
+  > **硬核防守**：“LangGraph 的 Checkpointer 负责保存 State Graph 的节点快照，而 Pico 的 `CheckpointManager` 绑定的是物理 Workspace 的合成指纹 `workspace_fingerprint`（Git Commit + 文件 mtime）。在结合时，Pico 的指纹比对逻辑可以直接作为 LangGraph Checkpointer 的拦截中间件，在恢复 Thread 前先校验物理磁盘是否发生漂移；若发生漂移，触发 `workspace-mismatch` 重锚定。”
 
 #### Q3：Pico 和普通 ReAct Agent 的本质区别是什么？
 
 - **源码文件**：`pico/core/engine.py`、`task_state.py`、`tool_executor.py`。
-- **答题骨架**：ReAct负责决策 → Harness负责约束和事实 → 强调不是新推理算法。
+- **关联文档库**：🔄 [docs/任务恢复/03_Resume状态机与5大判定矩阵.md](../任务恢复/03_Resume状态机与5大判定矩阵.md) | 🛡️ [docs/完成门禁/02_FinalReadiness门禁评估与5大检查项.md](../完成门禁/02_FinalReadiness门禁评估与5大检查项.md)
+- **答题骨架**：ReAct 负责决策 → Harness 负责约束和物理事实 → 强调不是新推理算法。
 - **🎙️ 60-120 秒示范稿**：
-  > “ReAct主要描述模型侧的推理循环，也就是根据观察决定下一步行动，再根据工具结果继续推理。它的问题是权限、状态和停止条件经常隐含在对话文本里，模型一句‘已经完成’就可能结束。Pico保留ReAct的灵活决策，但在外部增加确定性Harness：工具调用先经过Schema、路径、权限和重复调用检查；执行后写入TaskState、Trace和Checkpoint；输出Final时再检查修改、测试、Todo和必需产物。举例来说，模型可以决定运行pytest，但不能伪造pytest已经通过。我的理解是，ReAct回答‘下一步想做什么’，Harness负责‘这一步能否执行、执行后发生了什么、任务是否允许结束’，两者是推理层与运行治理层的关系。”
+  > “ReAct 主要描述模型侧的推理循环，也就是根据观察决定下一步行动，再根据工具结果继续推理。它的问题是权限、状态和停止条件经常隐含在对话文本里，模型一句‘我已经成功修好了 Bug’就可能直接结束。Pico 保留 ReAct 的灵活决策，但在外部增加确定性 Harness：工具调用先经过 8 重受控关卡检查；执行后写入 TaskState、Trace 和 Checkpoint；输出 `final_answer` 时再检查修改、测试、Todo 和必需产物。简而言之，ReAct 回答‘下一步想做什么’，Harness 负责‘这一步能否执行、执行后发生了什么、任务是否允许结束’，两者是决策与运行治理的关系。”
+- **🛡️ 面试官可能追问与硬核防守**：
+  > **面试官追问**：“如果模型在 ReAct 循环里连续多次想要调用一个不存在的工具，你的 Harness 怎么处理？”  
+  > **硬核防守**：“Harness 关卡 1 会做 Tool Lookup，查找失败直接返回 `tool_not_found` 错误提示给模型；若模型连续 2 轮用相同的错误参数尝试，关卡 3 的 `repeated_tool_call` 机制强行干预，返回警告打断死循环并降级输出，阻止模型无限消耗 Token。”
 
 #### Q4：什么任务才算代码仓库长链路任务？
 
