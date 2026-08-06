@@ -52,6 +52,10 @@ docs/**
 !docs/memory.md
 !docs/skills.md
 !docs/sandbox.md
+!docs/评测体系/
+!docs/评测体系/**
+!docs/面试高频实战/
+!docs/面试高频实战/**
 
 # OS files
 .DS_Store
